@@ -66,13 +66,19 @@ def broadcast_change():
         None,
     )
 
-class PathEntryDialog(QtWidgets.QDialog):
-    def __init__(self, value="", parent=None):
+class VariableDialog(QtWidgets.QDialog):
+    def __init__(self, name="", value="", scope="user", parent=None):
         super().__init__(parent)
-        self.setWindowTitle("PATH Entry")
+        self.setWindowTitle("Variable")
         layout = QtWidgets.QFormLayout(self)
+        self.name_edit = QtWidgets.QLineEdit(name)
         self.value_edit = QtWidgets.QLineEdit(value)
+        self.scope_combo = QtWidgets.QComboBox()
+        self.scope_combo.addItems(["user", "system"])
+        self.scope_combo.setCurrentText(scope)
+        layout.addRow("Name:", self.name_edit)
         layout.addRow("Value:", self.value_edit)
+        layout.addRow("Scope:", self.scope_combo)
         buttons = QtWidgets.QDialogButtonBox(
             QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel
         )
@@ -80,17 +86,21 @@ class PathEntryDialog(QtWidgets.QDialog):
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
 
-    def get_value(self):
-        return self.value_edit.text()
+    def get_data(self):
+        return (
+            self.name_edit.text(),
+            self.value_edit.text(),
+            self.scope_combo.currentText(),
+        )
 
 class EnvVarEditor(QtWidgets.QWidget):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("PATH Editor")
+        self.setWindowTitle("Environment Variable Editor")
         self.resize(600, 400)
         layout = QtWidgets.QVBoxLayout(self)
-        self.table = QtWidgets.QTableWidget(0, 1)
-        self.table.setHorizontalHeaderLabels(["Value"])
+        self.table = QtWidgets.QTableWidget(0, 3)
+        self.table.setHorizontalHeaderLabels(["Name", "Value", "Scope"])
         self.table.horizontalHeader().setStretchLastSection(True)
         layout.addWidget(self.table)
         btn_layout = QtWidgets.QHBoxLayout()
@@ -101,63 +111,56 @@ class EnvVarEditor(QtWidgets.QWidget):
         for btn in [self.add_btn, self.edit_btn, self.remove_btn, self.refresh_btn]:
             btn_layout.addWidget(btn)
         layout.addLayout(btn_layout)
-        self.add_btn.clicked.connect(self.add_entry)
-        self.edit_btn.clicked.connect(self.edit_entry)
-        self.remove_btn.clicked.connect(self.remove_entry)
+        self.add_btn.clicked.connect(self.add_variable)
+        self.edit_btn.clicked.connect(self.edit_variable)
+        self.remove_btn.clicked.connect(self.remove_variable)
         self.refresh_btn.clicked.connect(self.load_variables)
         self.load_variables()
 
     def load_variables(self):
         self.table.setRowCount(0)
-        try:
-            vars = read_variables("user")
-            path_val = ""
+        for scope in ["user", "system"]:
+            try:
+                vars = read_variables(scope)
+            except EnvironmentError:
+                vars = {}
             for name, value in vars.items():
-                if name.upper() == "PATH":
-                    path_val = value
-                    break
-        except EnvironmentError:
-            path_val = ""
-        for entry in path_val.split(os.pathsep):
-            if not entry:
-                continue
-            row = self.table.rowCount()
-            self.table.insertRow(row)
-            self.table.setItem(row, 0, QtWidgets.QTableWidgetItem(entry))
+                row = self.table.rowCount()
+                self.table.insertRow(row)
+                self.table.setItem(row, 0, QtWidgets.QTableWidgetItem(name))
+                self.table.setItem(row, 1, QtWidgets.QTableWidgetItem(value))
+                self.table.setItem(row, 2, QtWidgets.QTableWidgetItem(scope))
 
-    def save_variables(self):
-        entries = []
-        for row in range(self.table.rowCount()):
-            value = self.table.item(row, 0).text()
-            entries.append(value)
-        set_variable("Path", os.pathsep.join(entries), "user")
-
-    def add_entry(self):
-        dlg = PathEntryDialog(parent=self)
+    def add_variable(self):
+        dlg = VariableDialog(parent=self)
         if dlg.exec_():
-            value = dlg.get_value()
-            row = self.table.rowCount()
-            self.table.insertRow(row)
-            self.table.setItem(row, 0, QtWidgets.QTableWidgetItem(value))
-            self.save_variables()
+            name, value, scope = dlg.get_data()
+            set_variable(name, value, scope)
+            self.load_variables()
 
-    def edit_entry(self):
+    def edit_variable(self):
         row = self.table.currentRow()
         if row < 0:
             return
-        value = self.table.item(row, 0).text()
-        dlg = PathEntryDialog(value, self)
+        name = self.table.item(row, 0).text()
+        value = self.table.item(row, 1).text()
+        scope = self.table.item(row, 2).text()
+        dlg = VariableDialog(name, value, scope, self)
         if dlg.exec_():
-            new_value = dlg.get_value()
-            self.table.item(row, 0).setText(new_value)
-            self.save_variables()
+            new_name, new_value, new_scope = dlg.get_data()
+            if new_name != name or new_scope != scope:
+                delete_variable(name, scope)
+            set_variable(new_name, new_value, new_scope)
+            self.load_variables()
 
-    def remove_entry(self):
+    def remove_variable(self):
         row = self.table.currentRow()
         if row < 0:
             return
-        self.table.removeRow(row)
-        self.save_variables()
+        name = self.table.item(row, 0).text()
+        scope = self.table.item(row, 2).text()
+        delete_variable(name, scope)
+        self.load_variables()
 
 
 def main():
