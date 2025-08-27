@@ -30,3 +30,6 @@ jobs:
         with:
           name: env_var_editor_exe
           path: dist
+
+      - name: Show download link
+        run: echo "Download the executable at https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}#artifacts"
