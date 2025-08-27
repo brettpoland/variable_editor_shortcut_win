@@ -119,7 +119,11 @@ class EnvVarEditor(QtWidgets.QWidget):
         for scope in ["user", "system"]:
             try:
                 vars = read_variables(scope)
-                path_val = vars.get("PATH", "")
+                path_val = ""
+                for name, value in vars.items():
+                    if name.upper() == "PATH":
+                        path_val = value
+                        break
             except EnvironmentError:
                 path_val = ""
             for entry in path_val.split(os.pathsep):
@@ -137,7 +141,7 @@ class EnvVarEditor(QtWidgets.QWidget):
             scope = self.table.item(row, 1).text()
             entries[scope].append(value)
         for scope, vals in entries.items():
-            set_variable("PATH", os.pathsep.join(vals), scope)
+            set_variable("Path", os.pathsep.join(vals), scope)
 
     def add_entry(self):
         dlg = PathEntryDialog(parent=self)
